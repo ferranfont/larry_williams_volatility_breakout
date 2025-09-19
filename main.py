@@ -5,6 +5,7 @@ from chart_volume import plot_close_and_volume
 from quant_stat.range_calculations import add_range_indicators
 from utils.date_utils import add_day_of_week
 from plot_range import plot_range_chart
+from quant_stat.get_levels import get_levels
 
 symbol = 'ES'
 timeframe = '1D'
@@ -57,11 +58,14 @@ df_daily = add_range_indicators(df_daily, expansion_pct, stop_multiplier_pct, ra
 # Añadir día de la semana
 df_daily = add_day_of_week(df_daily, 'date')
 
+# Añadir niveles de trading
+df_daily = get_levels(df_daily)
+
 # Remover filas donde dow == "sunday"
 df_daily = df_daily[df_daily['dow'] != 'sunday']
 
 # Reordenar columnas
-column_order = ['date', 'dow', 'open', 'high', 'low', 'close', 'volume', 'range', 'range_avg', 'range_enter', 'range_stop']
+column_order = ['date', 'dow', 'open', 'high', 'low', 'close', 'volume', 'range', 'range_avg', 'range_enter', 'range_stop', 'long_level', 'short_level', 'long_stop', 'short_stop']
 df_daily = df_daily[column_order]
 
 # Guardar datos diarios en carpeta data
