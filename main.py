@@ -2,19 +2,27 @@
 import pandas as pd
 import os
 from chart_volume import plot_close_and_volume
-
+from quant_stat.range_calculations import add_range_indicators
+from utils.date_utils import add_day_of_week
+from plot_range import plot_range_chart
 
 symbol = 'ES'
+timeframe = '1D'
+
+# Parámetros para cálculos de range
+expansion_pct = 0.4  # 40% expansión para range_enter
+stop_multiplier_pct = 0.5  # 50% para range_stop
+range_lookback = 3  # Lookback de 20 días para cálculo de range    
 
 # ====================================================
 # 📥 CARGA DE DATOS
 # ====================================================
-directorio = '../DATA'
-nombre_fichero = 'export_es_2015_formatted.csv'
+directorio = 'data'
+nombre_fichero = 'es_1min_data.csv'
 ruta_completa = os.path.join(directorio, nombre_fichero)
 
 print("\n======================== 🔍 df  ===========================")
-df = pd.read_csv(ruta_completa)
+df = pd.read_csv(ruta_completa, index_col=0, parse_dates=True)
 print('Fichero:', ruta_completa, 'importado')
 print(f"Características del Fichero Base: {df.shape}")
 
@@ -22,9 +30,10 @@ print(f"Características del Fichero Base: {df.shape}")
 df.columns = [col.strip().lower() for col in df.columns]
 df = df.rename(columns={'volumen': 'volume'})
 
-# Asegurar formato datetime con zona UTC
-df['date'] = pd.to_datetime(df['date'], utc=True)
-df = df.set_index('date')
+
+
+
+# ====================================================
 
 # 🔁 Resample a velas diarias
 df_daily = df.resample('1D').agg({
@@ -39,7 +48,32 @@ df_daily = df.resample('1D').agg({
 df_daily = df_daily.reset_index()
 
 print(df_daily.head())
+print(f"Datos diarios - shape: {df_daily.shape}")
+print(df_daily.info())
+
+# Añadir indicadores de range
+df_daily = add_range_indicators(df_daily, expansion_pct, stop_multiplier_pct, range_lookback)
+
+# Añadir día de la semana
+df_daily = add_day_of_week(df_daily, 'date')
+
+# Remover filas donde dow == "sunday"
+df_daily = df_daily[df_daily['dow'] != 'sunday']
+
+# Reordenar columnas
+column_order = ['date', 'dow', 'open', 'high', 'low', 'close', 'volume', 'range', 'range_avg', 'range_enter', 'range_stop']
+df_daily = df_daily[column_order]
+
+# Guardar datos diarios en carpeta data
+output_daily = os.path.join('data', 'es_1D_data_range.csv')
+df_daily.to_csv(output_daily, index=False)
+
+print(f"Datos diarios guardados en: {output_daily}")
+print("\n=== DataFrame con indicadores de range (sin domingos) ===")
+print(df_daily.head(30))
 
 # Ejecutar gráfico
-timeframe = '1D'
 plot_close_and_volume(symbol, timeframe, df_daily)
+
+# Ejecutar gráfico de range
+plot_range_chart(symbol, timeframe, df_daily)
