@@ -38,25 +38,33 @@ This project implements a complete trading system based on the Larry Williams Vo
 pip install pandas numpy plotly
 ```
 
-## Usage
+## Quick Start - 3 Simple Steps
 
-### 1. Run Complete Trading System
+### 1. Process Raw Data (First Time Only)
+```bash
+python main.py
+```
+- Processes raw ES futures data
+- Calculates daily trading levels
+- Creates base data files
+
+### 2. Run Trading Strategy
 ```bash
 cd strat_OM
 python main_strat.py
 ```
+- Configure dates and filters in the file
+- Executes complete trading system
+- Generates charts and CSV results
 
-### 2. Generate Performance Analysis
+### 3. Analyze Performance
 ```bash
 cd strat_OM
 python summary.py
 ```
-
-### 3. Create Data Subsets
-```bash
-cd strat_OM
-python create_2022_subset.py
-```
+- Edit `target_filename` in the file to specify which results to analyze
+- Generates HTML reports and equity curves
+- Opens analysis in browser automatically
 
 ## Strategy Parameters
 

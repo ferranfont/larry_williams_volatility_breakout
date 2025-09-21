@@ -12,19 +12,26 @@ This file contains configuration and commands for Claude Code to better assist w
 
 ## Common Commands
 
-### Trading System Execution
+### Essential 3-Step Workflow
 ```bash
-# Run complete trading system with visualization
+# 1. Process raw data (first time only)
+python main.py
+
+# 2. Run trading strategy
 cd strat_OM
 python main_strat.py
 
-# Generate performance analysis and HTML reports
+# 3. Analyze results
 cd strat_OM
 python summary.py
+```
 
-# Create data subsets for specific periods
-cd strat_OM
-python create_2022_subset.py
+### Configuration Workflow
+```bash
+# 1. Edit main_strat.py: Set start_date, end_date, dow_filter
+# 2. Execute: python main_strat.py
+# 3. Edit summary.py: Set target_filename to specific CSV
+# 4. Execute: python summary.py
 ```
 
 ### Data Processing
@@ -73,12 +80,18 @@ python utils/date_utils.py
 
 ## Key Parameters
 
-### Trading Configuration
+### Trading Configuration (main_strat.py)
+- `start_date = '2024-08-15'` - Backtest start date
+- `end_date = '2025-04-13'` - Backtest end date
+- `dow_filter = 0` - Day filter (0=all days, 1=Monday, 2=Tuesday, etc.)
+
+### Strategy Parameters (main.py)
 - `expansion_pct = 0.4` - Range expansion for entry levels
-- `stop_multiplier_pct = 0.5` - Stop loss distance multiplier
+- `stop_multiplier_pct = 2.5` - Stop loss distance multiplier
 - `range_lookback = 3` - Lookback period for range calculations
-- `start_date = '2022-01-01'` - Backtest start date
-- `end_date = '2022-03-31'` - Backtest end date
+
+### Analysis Configuration (summary.py)
+- `target_filename = 'tracking_record_20240815_20250413.csv'` - Specific file to analyze
 
 ### File Naming Conventions
 - Tracking records: `tracking_record_YYYYMMDD_YYYYMMDD.csv`
