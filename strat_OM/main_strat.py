@@ -8,10 +8,18 @@ def main():
     """
     Script principal para crear subconjuntos de datos y ejecutar estrategias
     """
+    # ======================================================================================================
 
-    # Parámetros de fechas
-    start_date = '2022-01-01'
-    end_date = '2022-03-31'
+
+    # Filtro de día de la semana 
+    start_date = '2024-08-15'
+    end_date =   '2025-04-13'
+
+    # dow (day of week, dia de la semana) 
+    dow_filter = 0 # (0=sin filtro, 1=lunes, 2=martes, 3=miércoles, 4=jueves, 5=viernes)
+    
+  
+    # ======================================================================================================
 
     print("=== CREACIÓN DE SUBSET DE DATOS ===")
     print(f"Período: {start_date} a {end_date}")
@@ -34,7 +42,13 @@ def main():
 
     # Ejecutar sistema de trading
     print(f"\n=== EJECUTANDO SISTEMA DE TRADING ===")
-    trades_df, df_with_trades = order_management(df_subset)
+    if dow_filter > 0:
+        dow_names = {1: 'lunes', 2: 'martes', 3: 'miércoles', 4: 'jueves', 5: 'viernes'}
+        print(f"Filtro activo: Solo operar en {dow_names.get(dow_filter, 'desconocido')}")
+    else:
+        print("Sin filtro de día de la semana: operar todos los días")
+
+    trades_df, df_with_trades = order_management(df_subset, dow_filter=dow_filter)
 
     # Generar gráfico con datos de trading (lo último)
     print(f"\n=== GENERANDO GRÁFICO CON TRADES ===")
@@ -46,7 +60,7 @@ def main():
         tracking_filename = save_trading_results(trades_df, start_date, end_date)
 
         print(f"\n=== PRIMEROS 10 TRADES ===")
-        print(trades_df.head(10))
+        print(trades_df.head(20))
     else:
         print("No se generaron trades en el período analizado")
 

@@ -4,7 +4,7 @@ import os
 from chart_volume import plot_close_and_volume
 from quant_stat.range_calculations import add_range_indicators
 from utils.date_utils import add_day_of_week
-from plot_range import plot_range_chart
+from strat_OM.plot_range import plot_range_chart
 from quant_stat.get_levels import get_levels
 
 symbol = 'ES'
@@ -12,7 +12,7 @@ timeframe = '1D'
 
 # Parámetros para cálculos de range
 expansion_pct = 0.4  # 40% expansión para range_enter
-stop_multiplier_pct = 0.5  # 50% para range_stop
+stop_multiplier_pct = 2.5  # 50% para range_stop
 range_lookback = 3  # Lookback de 20 días para cálculo de range    
 
 # ====================================================

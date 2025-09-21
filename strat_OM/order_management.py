@@ -2,12 +2,13 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 
-def order_management(df):
+def order_management(df, dow_filter=0):
     """
     Sistema de gestión de órdenes basado en señales de crossover
 
     Parameters:
     df (DataFrame): DataFrame con datos de precios y niveles
+    dow_filter (int): Filtro de día de la semana (0=sin filtro, 1=lunes, 2=martes, 3=miércoles, 4=jueves, 5=viernes)
 
     Returns:
     tuple: (trades_df, df_with_trades) - Registro de operaciones y DataFrame enriquecido
@@ -40,6 +41,25 @@ def order_management(df):
 
         if len(day_data) < 2:
             continue
+
+        # Aplicar filtro de día de la semana si está activo
+        if dow_filter > 0:
+            # Obtener el día de la semana del primer registro del día
+            first_record = day_data.iloc[0]
+            day_dow = first_record['dow'].lower()
+
+            # Mapeo de números a días de la semana
+            dow_mapping = {
+                1: 'monday',
+                2: 'tuesday',
+                3: 'wednesday',
+                4: 'thursday',
+                5: 'friday'
+            }
+
+            # Si el día no coincide con el filtro, saltar este día
+            if day_dow != dow_mapping.get(dow_filter):
+                continue
 
         day_data = day_data.sort_values('date').reset_index(drop=True)
 
@@ -124,6 +144,7 @@ def order_management(df):
                     # Registrar trade
                     trade_record = {
                         'date': active_trade['date_only'],
+                        'dow': day_data.iloc[0]['dow'],  # Día de la semana
                         'trade_type': active_trade['trade_type'],
                         'entry_time': active_trade['entry_time'],
                         'entry_price': active_trade['entry_price'],
