@@ -28,6 +28,28 @@ def plot_close_and_volume(symbol, timeframe, df):
         name='Close'
     ), row=1, col=1)
 
+    # Añadir puntos naranjas solo para días de volatilidad media-baja (upto_60)
+    if 'day_type' in df.columns:
+        max_vol_days = df[df['day_type'] == 'upto_60']
+        if len(max_vol_days) > 0:
+            fig.add_trace(go.Scatter(
+                x=max_vol_days['date'],
+                y=max_vol_days['close'],
+                mode='markers',
+                marker=dict(
+                    color='orange',
+                    size=6,
+                    opacity=0.8,
+                    symbol='circle'
+                ),
+                name='Maximum Volatility Days (100+ pts)',
+                hovertemplate='<b>Max Vol Day</b><br>' +
+                              'Date: %{x}<br>' +
+                              'Close: %{y}<br>' +
+                              'Range: 100+ points<br>' +
+                              '<extra></extra>'
+            ), row=1, col=1)
+
     # Barras de volumen
     fig.add_trace(go.Bar(
         x=df['date'],
@@ -48,7 +70,14 @@ def plot_close_and_volume(symbol, timeframe, df):
         font=dict(size=12, color="black"),
         plot_bgcolor='rgba(255,255,255,0.05)',
         paper_bgcolor='rgba(240,240,240,0.1)',
-        showlegend=False,
+        showlegend=True,
+        legend=dict(
+            x=0.02,
+            y=0.98,
+            bgcolor='rgba(255,255,255,0.8)',
+            bordercolor='rgba(0,0,0,0.2)',
+            borderwidth=1
+        ),
         template='plotly_white',
         xaxis=dict(
             type='date',

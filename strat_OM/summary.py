@@ -12,7 +12,8 @@ from datetime import datetime
 # ============================================================
 
 
-target_filename = 'tracking_record_20240815_20250413.csv'  # Cambiar por nombre específico: 'tracking_record_20200815_20230313.csv'
+#target_filename = 'tracking_record_20170902_20250428_fix_stop_500_trail_15_tp_2d.csv'  # Cambiar por nombre específico: 'tracking_record_20200815_20230313.csv'
+target_filename = 'tracking_record_20170902_20250428_range_stop_trail_1500_tp_0d.csv'  # Cambiar por nombre específico: 'tracking_record_20200815_20230313.csv'
 
 
 def load_tracking_data(filename=None):
@@ -29,9 +30,9 @@ def load_tracking_data(filename=None):
         # Buscar el archivo más reciente de tracking
         current_dir = os.path.dirname(os.path.abspath(__file__))
         parent_dir = os.path.dirname(current_dir)
-        data_dir = os.path.join(parent_dir, 'data')
+        outputs_dir = os.path.join(parent_dir, 'outputs')
 
-        tracking_files = [f for f in os.listdir(data_dir) if f.startswith('tracking_record_')]
+        tracking_files = [f for f in os.listdir(outputs_dir) if f.startswith('tracking_record_')]
         if not tracking_files:
             raise FileNotFoundError("No se encontraron archivos de tracking record")
 
@@ -41,8 +42,8 @@ def load_tracking_data(filename=None):
     # Cargar datos
     current_dir = os.path.dirname(os.path.abspath(__file__))
     parent_dir = os.path.dirname(current_dir)
-    data_dir = os.path.join(parent_dir, 'data')
-    file_path = os.path.join(data_dir, filename)
+    outputs_dir = os.path.join(parent_dir, 'outputs')
+    file_path = os.path.join(outputs_dir, filename)
 
     print(f"Cargando datos desde: {file_path}")
 
@@ -608,6 +609,114 @@ def create_performance_charts(df, stats, filename_prefix):
 
     print(f"Dashboard de rendimiento guardado: {html_path}")
 
+def create_profit_histogram(df, filename_prefix):
+    """
+    Crea histograma de profits en USD con mayor granularidad
+
+    Parameters:
+    df (DataFrame): Datos de trading
+    filename_prefix (str): Prefijo para el nombre del archivo
+    """
+    # Crear histograma de profits
+    fig = go.Figure()
+
+    # Separar profits y losses para diferentes colores
+    profits = df[df['profit_usd'] > 0]['profit_usd']
+    losses = df[df['profit_usd'] <= 0]['profit_usd']
+
+    # Calcular número de bins más granular basado en el rango de datos
+    data_range = df['profit_usd'].max() - df['profit_usd'].min()
+    optimal_bins = max(30, min(80, int(data_range / 100)))  # Más bins para mayor detalle
+
+    # Añadir histograma de profits (verde)
+    if len(profits) > 0:
+        fig.add_trace(go.Histogram(
+            x=profits,
+            name='Profits',
+            marker_color='rgba(0, 150, 0, 0.7)',
+            opacity=0.8,
+            nbinsx=optimal_bins,
+            bingroup=1
+        ))
+
+    # Añadir histograma de losses (rojo)
+    if len(losses) > 0:
+        fig.add_trace(go.Histogram(
+            x=losses,
+            name='Losses',
+            marker_color='rgba(200, 0, 0, 0.7)',
+            opacity=0.8,
+            nbinsx=optimal_bins,
+            bingroup=1
+        ))
+
+    # Configurar layout con más detalle
+    fig.update_layout(
+        title='Distribution of Profit/Loss in USD (High Granularity)',
+        xaxis_title='Profit/Loss (USD)',
+        yaxis_title='Number of Trades',
+        template='plotly_white',
+        width=1200,
+        height=700,
+        barmode='overlay',
+        showlegend=True,
+        legend=dict(
+            x=0.7,
+            y=0.9,
+            bgcolor='rgba(255,255,255,0.9)',
+            bordercolor='rgba(0,0,0,0.3)',
+            borderwidth=1
+        )
+    )
+
+    # Añadir línea vertical en x=0
+    fig.add_vline(x=0, line_dash="dash", line_color="black", line_width=2, opacity=0.8)
+
+    # Añadir líneas de referencia para el stop loss esperado
+    fig.add_vline(x=-800, line_dash="dot", line_color="red", line_width=2, opacity=0.6,
+                  annotation_text="Expected Stop Loss (-$800)", annotation_position="top")
+
+    # Estadísticas más detalladas
+    total_profit = df['profit_usd'].sum()
+    avg_profit = df['profit_usd'].mean()
+    max_loss = df['profit_usd'].min()
+    max_profit = df['profit_usd'].max()
+
+    # Contar trades con pérdidas mayores al stop esperado
+    large_losses = df[df['profit_usd'] < -800]
+    large_loss_count = len(large_losses)
+
+    fig.add_annotation(
+        x=0.65, y=0.85,
+        xref="paper", yref="paper",
+        text=f"<b>Trading Statistics</b><br>" +
+             f"Total P&L: ${total_profit:,.2f}<br>" +
+             f"Average Trade: ${avg_profit:,.2f}<br>" +
+             f"Max Loss: ${max_loss:,.2f}<br>" +
+             f"Max Profit: ${max_profit:,.2f}<br>" +
+             f"Losses > $800: {large_loss_count} trades",
+        showarrow=False,
+        font=dict(size=14, color="black"),
+        bgcolor="rgba(255,255,255,0.95)",
+        bordercolor="rgba(0,0,0,0.4)",
+        borderwidth=2,
+        align="left"
+    )
+
+    # Guardar gráfico
+    charts_dir = 'charts'
+    os.makedirs(charts_dir, exist_ok=True)
+    html_path = f'{charts_dir}/profit_histogram_{filename_prefix}.html'
+    fig.write_html(html_path, config={"scrollZoom": True})
+
+    print(f"Histograma de profits guardado: {html_path}")
+
+    # Mostrar información sobre pérdidas grandes
+    if large_loss_count > 0:
+        print(f"\n⚠️  ATENCIÓN: {large_loss_count} trades con pérdidas mayores a $800:")
+        print(large_losses[['date', 'trade_type', 'entry_price', 'exit_price', 'profit_usd', 'exit_reason']].to_string(index=False))
+    webbrowser.open('file://' + os.path.realpath(html_path))
+
 def print_summary_report(stats, risk_ratios, filename):
     """
     Imprime reporte completo de la estrategia
@@ -673,6 +782,9 @@ def generate_strategy_summary(filename=None):
 
     # Crear equity curve
     equity_curve = create_equity_curve_chart(df, filename_prefix)
+
+    # Crear histograma de profits
+    create_profit_histogram(df, filename_prefix)
 
     # Calcular drawdown
     drawdown_stats = calculate_drawdown_stats(equity_curve)

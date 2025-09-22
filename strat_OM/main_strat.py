@@ -12,11 +12,18 @@ def main():
 
 
     # Filtro de día de la semana 
-    start_date = '2024-08-15'
-    end_date =   '2025-04-13'
+    start_date = '2017-09-02'
+    end_date =   '2025-04-28'
+    tp_days =     2 # 0 = cerrar al final del día de entrada, 1 = mantener 1 día adicional, etc.
 
-    # dow (day of week, dia de la semana) 
-    dow_filter = 0 # (0=sin filtro, 1=lunes, 2=martes, 3=miércoles, 4=jueves, 5=viernes)
+    # dow (day of week, dia de la semana)
+    dow_filter =  0         # (0=sin filtro, 1=lunes, 2=martes, 3=miércoles, 4=jueves, 5=viernes)
+
+    # Stop Loss Configuration
+    use_fixed_stop = TrueFalse   # True = stop fijo en USD, False = stop basado en range
+    fixed_stop_usd = 500    # Stop fijo de $500
+    trail =          15     # Puntos de ganancia para activar trailing stop (break-even)
+  
     
   
     # ======================================================================================================
@@ -48,16 +55,33 @@ def main():
     else:
         print("Sin filtro de día de la semana: operar todos los días")
 
-    trades_df, df_with_trades = order_management(df_subset, dow_filter=dow_filter)
+    if use_fixed_stop:
+        print(f"Stop Loss: Fijo ${fixed_stop_usd}")
+    else:
+        print("Stop Loss: Basado en range (variable)")
+
+    print(f"Trailing Stop: Break-even después de {trail} puntos de ganancia")
+
+    if tp_days == 0:
+        print(f"Target Profit: Cierre al final del día de entrada")
+    else:
+        print(f"Target Profit: Mantener posición {tp_days} día(s) adicional(es)")
+
+    trades_df, df_with_trades = order_management(df_subset, dow_filter=dow_filter,
+                                                 use_fixed_stop=use_fixed_stop, fixed_stop_usd=fixed_stop_usd,
+                                                 trail=trail, tp_days=tp_days)
 
     # Generar gráfico con datos de trading (lo último)
     print(f"\n=== GENERANDO GRÁFICO CON TRADES ===")
-    plot_subset_chart('ES', '1min', df_with_trades, 'trades')
+    # COMENTAR SI NO SE DESEA CHART CON LAS ENTRADAS/SALIDAS
+    #plot_subset_chart('ES', '1min', df_with_trades, 'trades')
 
     # Guardar resultados de trading
     if len(trades_df) > 0:
         print(f"\n=== GUARDANDO RESULTADOS ===")
-        tracking_filename = save_trading_results(trades_df, start_date, end_date)
+        tracking_filename = save_trading_results(trades_df, start_date, end_date,
+                                                  use_fixed_stop=use_fixed_stop, fixed_stop_usd=fixed_stop_usd,
+                                                  trail=trail, tp_days=tp_days)
 
         print(f"\n=== PRIMEROS 10 TRADES ===")
         print(trades_df.head(20))

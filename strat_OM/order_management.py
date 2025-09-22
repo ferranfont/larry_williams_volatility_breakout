@@ -1,14 +1,18 @@
 import pandas as pd
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 
-def order_management(df, dow_filter=0):
+def order_management(df, dow_filter=0, use_fixed_stop=False, fixed_stop_usd=800, trail=12, tp_days=0):
     """
-    Sistema de gestión de órdenes basado en señales de crossover
+    Sistema de gestión de órdenes basado en señales de crossover con trailing stop y target profit
 
     Parameters:
     df (DataFrame): DataFrame con datos de precios y niveles
     dow_filter (int): Filtro de día de la semana (0=sin filtro, 1=lunes, 2=martes, 3=miércoles, 4=jueves, 5=viernes)
+    use_fixed_stop (bool): Si usar stop fijo en USD en lugar de stop basado en range
+    fixed_stop_usd (float): Cantidad en USD para stop fijo (default 800)
+    trail (float): Puntos de ganancia para activar trailing stop a break-even (default 12)
+    tp_days (int): Días para mantener la posición (0=cierre mismo día, 1=siguiente día, etc.)
 
     Returns:
     tuple: (trades_df, df_with_trades) - Registro de operaciones y DataFrame enriquecido
@@ -34,6 +38,7 @@ def order_management(df, dow_filter=0):
         daily_levels[col] = pd.to_numeric(daily_levels[col], errors='coerce')
 
     trades = []
+    active_trade = None  # Mantener trade activo a través de múltiples días
 
     # Procesar cada día
     for _, day_levels in daily_levels.iterrows():
@@ -42,8 +47,8 @@ def order_management(df, dow_filter=0):
         if len(day_data) < 2:
             continue
 
-        # Aplicar filtro de día de la semana si está activo
-        if dow_filter > 0:
+        # Aplicar filtro de día de la semana si está activo (solo para nuevas entradas)
+        if dow_filter > 0 and active_trade is None:
             # Obtener el día de la semana del primer registro del día
             first_record = day_data.iloc[0]
             day_dow = first_record['dow'].lower()
@@ -72,10 +77,14 @@ def order_management(df, dow_filter=0):
         if pd.isna(long_level) or pd.isna(short_level) or pd.isna(long_stop) or pd.isna(short_stop):
             continue
 
-        # Variables para controlar señales del día
-        long_signal_triggered = False
-        short_signal_triggered = False
-        active_trade = None
+        # Variables para controlar señales del día (solo si no hay trade activo)
+        if active_trade is None:
+            long_signal_triggered = False
+            short_signal_triggered = False
+        else:
+            # Si hay trade activo, no buscar nuevas señales
+            long_signal_triggered = True
+            short_signal_triggered = True
 
         # Analizar minuto a minuto
         for i in range(1, len(day_data)):
@@ -86,24 +95,53 @@ def order_management(df, dow_filter=0):
             # Detectar señal LONG (primer crossover verde del día)
             if not long_signal_triggered and prev_price <= long_level < current_price:
                 if active_trade is None:  # No hay trade activo
+                    # Calcular stop level basado en configuración
+                    if use_fixed_stop:
+                        # Stop fijo: entry_price - (stop_usd / 50)
+                        # $50 por punto, entonces stop_usd / 50 = puntos de stop
+                        stop_points = fixed_stop_usd / 50
+                        calculated_stop = current_price - stop_points
+                    else:
+                        # Stop basado en range (comportamiento original)
+                        calculated_stop = long_stop
+
+                    # Calcular fecha objetivo de salida
+                    entry_date = day_levels['date_only']
+                    target_exit_date = entry_date + timedelta(days=tp_days)
+
                     active_trade = {
                         'entry_time': current_time,
                         'entry_price': current_price,
                         'trade_type': 'BUY',
-                        'stop_level': long_stop,
-                        'date_only': day_levels['date_only']
+                        'stop_level': calculated_stop,
+                        'date_only': day_levels['date_only'],
+                        'target_exit_date': target_exit_date
                     }
                     long_signal_triggered = True
 
             # Detectar señal SHORT (primer crossunder rojo del día)
             elif not short_signal_triggered and prev_price >= short_level > current_price:
                 if active_trade is None:  # No hay trade activo
+                    # Calcular stop level basado en configuración
+                    if use_fixed_stop:
+                        # Stop fijo: entry_price + (stop_usd / 50)
+                        stop_points = fixed_stop_usd / 50
+                        calculated_stop = current_price + stop_points
+                    else:
+                        # Stop basado en range (comportamiento original)
+                        calculated_stop = short_stop
+
+                    # Calcular fecha objetivo de salida
+                    entry_date = day_levels['date_only']
+                    target_exit_date = entry_date + timedelta(days=tp_days)
+
                     active_trade = {
                         'entry_time': current_time,
                         'entry_price': current_price,
                         'trade_type': 'SELL',
-                        'stop_level': short_stop,
-                        'date_only': day_levels['date_only']
+                        'stop_level': calculated_stop,
+                        'date_only': day_levels['date_only'],
+                        'target_exit_date': target_exit_date
                     }
                     short_signal_triggered = True
 
@@ -111,6 +149,18 @@ def order_management(df, dow_filter=0):
             if active_trade is not None:
                 exit_triggered = False
                 exit_reason = None
+
+                # Aplicar trailing stop (mover stop a break-even cuando hay ganancia >= trail puntos)
+                if active_trade['trade_type'] == 'BUY':
+                    # Para BUY: si precio actual está 'trail' puntos arriba del entry, mover stop a break-even
+                    profit_points = current_price - active_trade['entry_price']
+                    if profit_points >= trail and active_trade['stop_level'] < active_trade['entry_price']:
+                        active_trade['stop_level'] = active_trade['entry_price']  # Break-even
+                elif active_trade['trade_type'] == 'SELL':
+                    # Para SELL: si precio actual está 'trail' puntos abajo del entry, mover stop a break-even
+                    profit_points = active_trade['entry_price'] - current_price
+                    if profit_points >= trail and active_trade['stop_level'] > active_trade['entry_price']:
+                        active_trade['stop_level'] = active_trade['entry_price']  # Break-even
 
                 # Verificar stop loss
                 if active_trade['trade_type'] == 'BUY' and current_price <= active_trade['stop_level']:
@@ -120,10 +170,16 @@ def order_management(df, dow_filter=0):
                     exit_triggered = True
                     exit_reason = 'STOP_LOSS'
 
-                # Si es el último minuto del día, cerrar posición
-                if i == len(day_data) - 1:
-                    exit_triggered = True
-                    exit_reason = 'END_OF_DAY'
+                # Verificar si se alcanzó la fecha objetivo de salida
+                current_date = current_time.date()
+                if current_date >= active_trade['target_exit_date']:
+                    # Si estamos en la fecha objetivo o después, cerrar al final del día
+                    if i == len(day_data) - 1:
+                        exit_triggered = True
+                        if tp_days == 0:
+                            exit_reason = 'END_OF_DAY'
+                        else:
+                            exit_reason = f'TARGET_PROFIT_{tp_days}D'
 
                 # Ejecutar salida
                 if exit_triggered:
@@ -163,6 +219,44 @@ def order_management(df, dow_filter=0):
                     # Reset trade
                     active_trade = None
 
+    # Si queda un trade activo al final del período, cerrarlo
+    if active_trade is not None:
+        # Buscar el último precio disponible
+        last_day_data = df[df['date_only'] == df['date_only'].max()]
+        if len(last_day_data) > 0:
+            last_price = last_day_data.iloc[-1]['close']
+            last_time = last_day_data.iloc[-1]['date']
+
+            # Calcular métricas
+            if active_trade['trade_type'] == 'BUY':
+                profit_points = last_price - active_trade['entry_price']
+                profit_label = 'PROFIT' if profit_points > 0 else 'LOSS'
+            else:  # SELL
+                profit_points = active_trade['entry_price'] - last_price
+                profit_label = 'PROFIT' if profit_points > 0 else 'LOSS'
+
+            profit_usd = profit_points * 50  # $50 por punto
+            time_in_market = (last_time - active_trade['entry_time']).total_seconds() / 60  # minutos
+
+            # Registrar trade final
+            trade_record = {
+                'date': active_trade['date_only'],
+                'dow': df[df['date_only'] == active_trade['date_only']].iloc[0]['dow'],
+                'trade_type': active_trade['trade_type'],
+                'entry_time': active_trade['entry_time'],
+                'entry_price': active_trade['entry_price'],
+                'exit_time': last_time,
+                'exit_price': last_price,
+                'exit_reason': 'END_OF_PERIOD',
+                'profit_points': round(profit_points, 2),
+                'profit_usd': round(profit_usd, 2),
+                'profit_label': profit_label,
+                'time_in_market_minutes': round(time_in_market, 1),
+                'stop_level': active_trade['stop_level']
+            }
+
+            trades.append(trade_record)
+
     # Convertir a DataFrame
     trades_df = pd.DataFrame(trades)
 
@@ -191,7 +285,7 @@ def order_management(df, dow_filter=0):
 
     return trades_df, df_with_trades
 
-def save_trading_results(trades_df, period_start, period_end):
+def save_trading_results(trades_df, period_start, period_end, use_fixed_stop=False, fixed_stop_usd=800, trail=12, tp_days=0):
     """
     Guarda los resultados de trading en CSV
 
@@ -199,24 +293,37 @@ def save_trading_results(trades_df, period_start, period_end):
     trades_df (DataFrame): DataFrame con los trades
     period_start (str): Fecha de inicio del período
     period_end (str): Fecha de fin del período
+    use_fixed_stop (bool): Si se usó stop fijo
+    fixed_stop_usd (float): Valor del stop fijo en USD
+    trail (float): Puntos para activar trailing stop
+    tp_days (int): Días para mantener la posición
     """
     if len(trades_df) == 0:
         print("No hay trades para guardar")
         return
 
-    # Obtener ruta del directorio data
+    # Obtener ruta del directorio outputs
     import os
     current_dir = os.path.dirname(os.path.abspath(__file__))
     parent_dir = os.path.dirname(current_dir)
-    data_dir = os.path.join(parent_dir, 'data')
+    outputs_dir = os.path.join(parent_dir, 'outputs')
 
-    # Generar nombre de archivo
+    # Crear directorio outputs si no existe
+    os.makedirs(outputs_dir, exist_ok=True)
+
+    # Generar nombre de archivo con información del stop
     start_str = period_start.replace('-', '')
     end_str = period_end.replace('-', '')
-    filename = f'tracking_record_{start_str}_{end_str}.csv'
 
-    # Ruta completa en directorio data
-    full_path = os.path.join(data_dir, filename)
+    if use_fixed_stop:
+        stop_info = f'fix_stop_{int(fixed_stop_usd)}_trail_{int(trail)}_tp_{int(tp_days)}d'
+    else:
+        stop_info = f'range_stop_trail_{int(trail)}_tp_{int(tp_days)}d'
+
+    filename = f'tracking_record_{start_str}_{end_str}_{stop_info}.csv'
+
+    # Ruta completa en directorio outputs
+    full_path = os.path.join(outputs_dir, filename)
 
     # Guardar CSV
     trades_df.to_csv(full_path, index=False)
